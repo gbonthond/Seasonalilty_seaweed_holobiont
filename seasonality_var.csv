@@ -1,4 +1,4 @@
-library_sample_code,population,pop,Sample_id,substrate,month,collection_date,day,method,salinity,pH,timepoint,year,season_year,unique_timepoint,seq_depth,temperature
+library_sample_code,population,pop,Sample_id,sample_type,month,collection_date,day,method,salinity,pH,timepoint,year,season_year,unique_timepoint,seq_depth,temperature
 AHPNAT8X131X2,Heiligenhafen,hei,hei1,alga,May,01.05.19,121,precipitation,14.4,8.03,t2,year2,spring_year2,t2_year2,50624,9.51
 AHPNAT8X132X2,Heiligenhafen,hei,hei2,alga,May,01.05.19,121,precipitation,14.4,8.03,t2,year2,spring_year2,t2_year2,58353,9.51
 AHPNAT8X134X2,Heiligenhafen,hei,hei4,alga,May,01.05.19,121,precipitation,14.4,8.03,t2,year2,spring_year2,t2_year2,62943,9.51
