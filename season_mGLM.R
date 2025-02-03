@@ -1,13 +1,13 @@
 ##### PACKAGES #####
-library("mvabund")  # mulivariate GLMs (mGLMs)
+library("suncalc")  # get day lengths
+library("mobr")     # calculating diversity 
+library("car")      # generalized linear models additional package
+library("effects")  # plotting
+library("emmeans")  # means and confidence intervals and post-hoc test
 library("ggplot2")  # plots
-library("iNEXT")    # diversity indices
-library("mobr")       # calculating evenness
-library("DHARMa")     # for diagnostic plots when running GLMMs
-library("car")        # generalized linear mixed models (GLMMs) additional package
-library("DescTools")  # calculating pseudo R2
-library("effects")    # plotting
-library("emmeans")    # package to get means and confidence intervals for plotting; post-hoc test
+library("egg")
+library("mvabund")  # mulivariate GLMs (mGLMs)
+library("vegan")  
 
 ##################
 
@@ -16,7 +16,7 @@ library("emmeans")    # package to get means and confidence intervals for plotti
 permanent.core <- function(model, smry, aov = NULL, p = 0.01, coef = 0, pooled = F, p.adjust = "none"){
   dif_alga <- data.frame("taxon"         = colnames(model$y),
                          "abundance"     = colSums(model$y),
-                         "occurrence"    = colSums(model$y != 0)/nrow(model$y),
+                         "occupancy"     = colSums(model$y != 0)/nrow(model$y),
                          "p_val_2"       = p.adjust(smry$uni.p[, paste("sample_type", levels(model$data$sample_type)[2], sep = "")], method = p.adjust),
                          "p_val_3"       = p.adjust(smry$uni.p[, paste("sample_type", levels(model$data$sample_type)[3], sep = "")], method = p.adjust),
                          "p_fisher"      = p.adjust(pchisq(-2*(log(smry$uni.p[, paste("sample_type", levels(model$data$sample_type)[2], sep = "")]) + log(smry$uni.p[, paste("sample_type", levels(model$data$sample_type)[3], sep = "")])), df = 4, lower.tail = F), method = p.adjust),
@@ -66,22 +66,11 @@ permanent.core <- function(model, smry, aov = NULL, p = 0.01, coef = 0, pooled =
   
   dif_alga_stacked <- dif_alga_stacked[order(dif_alga_stacked$abundance, decreasing = T), ]
  
-#  dif_alga_pooled <- data.frame(
-#    "taxon" = rownames(dif_alga_core),
-#    "abundance" = dif_alga_core$abundance,
-#    "coefficient" = dif_alga_core$averaged_coefficient,
-#    "lower" = dif_alga_core$pooled_lower,
-#    "upper" = dif_alga_core$pooled_upper,
-#    "p_wat" = dif_alga_core$p_val_water,
-#    "p_sed" = dif_alga_core$p_val_sediment,
-#    "p_fisher" = pchisq(-2*(log(dif_alga_core$p_val_water) + log(dif_alga_core$p_val_sediment)), df = 4, lower.tail = F)
-#  )
-  
   dif_alga_core <- dif_alga_core[order(dif_alga_core$abundance, decreasing = T), ]
   
   colnames(dif_alga_core) <- c("taxon",
                                "abundance",
-                               "occurrence",
+                               "occupancy",
                                paste("p_val", levels(model$data$sample_type)[2], sep = "_"),
                                paste("p_val", levels(model$data$sample_type)[3], sep = "_"),
                                "p_val_fisher",
@@ -148,111 +137,227 @@ seasonal.core  <- function(model, smry, aov = NULL, p = 0.01, coef = 0, p.adjust
 
   
 }
-inv.logit <- function(x) {exp(x)/(1+exp(x))}
+occupancy <- function(community, taxonomy) {
+  com <- community[, rownames(taxonomy)]
+  com[com != 0] <- 1
+  occupancy <- colSums(com)/nrow(com)
+}
+abundance <- function(community, taxonomy, proportional = T) {
+  com <- community[, rownames(taxonomy)]
+  if(proportional == F){
+    abundance <- colSums(com)}
+  else
+    abundance <- colSums(com)/sum(colSums(com))
+}
+rarefaction <- function(x, sample, replicate) {
+  library("progress")
+  library("vegan")
+  pb <- progress_bar$new(total = replicate)
+  rar_list <- list()
+  for (i in 1:replicate) {
+    rar_list[[i]] <- rrarefy(x, sample)
+    pb$tick()
+    Sys.sleep(1 / 100)
+  }
+  rar_table <- Reduce(`+`, rar_list)/replicate
+  rar_table <- data.frame(rar_table[, colSums(rar_table) > 0])
+  rm(rar_list)
+  invisible(rar_table)
+}
 ###################
 
 
 ##### DATA PREPARATION #####
+permanent_otu <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/seasonality_otu.csv", header = T, row.names = 1);dim(permanent_otu)
+#permanent_rar <- rarefaction(permanent_otu, sample = 1000, replicate = 100);dim(permanent_rar)
+#write.csv(permanent_rar, file = "permanent_rar.csv");dim(permanent_rar)
+permanent_rar <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/permanent_rar.csv", header = T, row.names = 1);dim(permanent_rar)
+permanent_var <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/seasonality_var.csv", header = T, row.names = 1, stringsAsFactors = T);dim(permanent_var)
+permanent_var$day_length <- with(getSunlightTimes(date = seq(as.Date("2020-01-01"), as.Date("2020-12-31"), by = "day"), lat = 54.3233, lon = 10.1228, keep = c("sunrise", "sunset")), as.numeric(difftime(sunset, sunrise, units = "hours")))[permanent_var$day]
+permanent_var <- permanent_var[rownames(permanent_rar), ]
 
-### variables
-permanent_otu <- read.csv(file = "C:/chantal/analysis/season_otu.csv", row.names = 1);dim(permanent_otu)
-permanent_var <- read.csv(file = "C:/chantal/analysis/season_var.csv", row.names = 2, stringsAsFactors = T)[, -1];dim(permanent_var)
-permanent_var$seq_depth <- rowSums(permanent_otu)
-rownames(permanent_var) -> rownames(permanent_otu)
+permanent_tax <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/seasonality_tax.csv", header = T, row.names = 1);dim(permanent_tax)
+permanent_ko  <- round(read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/seasonality_ko.csv", header = T, row.names = 1));dim(permanent_ko)
+permanent_ko  <- permanent_ko[, colSums(permanent_ko) > 0];dim(permanent_ko)
+permanent_ko  <- permanent_ko[, order(colSums(permanent_ko), decreasing = T)];dim(permanent_ko)
+#permanent_ko_rar <- rarefaction(permanent_ko, sample = 1000, replicate = 100);dim(permanent_ko_rar)
+#write.csv(permanent_rar, file = "C:/Users/Bonthond/Documents/GitHub/Seasonalilty_seaweed_holobiont/permanent_ko_rar.csv");dim(permanent_rar)
+permanent_rar <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/permanent_ko_rar.csv", header = T, row.names = 1);dim(permanent_ko_rar)
 
-permanent_ko <- read.csv(file="C:/chantal/analysis/16S_ko.csv", header = T, row.names = 1);dim(permanent_ko)
-all.equal(rownames(permanent_otu), rownames(permanent_ko))
-
-### taxonomic info 
-permanent_tax <- read.csv(file = "C:/chantal/processing/stability.trim.contigs.good.unique.good.filter.unique.precluster.pick.pick.fit.optifit_mcc.0.03.cons.taxonomy", sep = "\t");dim(permanent_tax)
-rownames(permanent_tax) <- permanent_tax$OTU 
-permanent_tax$Taxonomy <- gsub(")(", "(", gsub(")_", "", gsub("_(", "", permanent_tax[, 3], fixed = TRUE), fixed = TRUE), fixed = TRUE)
-permanent_tax$Taxonomy <- gsub("Group(DSEG","Group_DSEG", permanent_tax[, 3], fixed = TRUE)
-permanent_tax$Taxonomy <- gsub("SAR324_clade(Marine_group_B","SAR324_clade_Marine_group_B", permanent_tax[, 3], fixed = TRUE)
-permanent_tax$Taxonomy <- gsub("OM60(NOR5clade","OM60_NOR5_clade", permanent_tax[, 3],fixed = TRUE)
-permanent_tax$Taxonomy <- gsub("[(]",";", gsub("[)]","", permanent_tax[, 3]))
-permanent_tax <- data.frame(permanent_tax$OTU, do.call('rbind', strsplit(as.character(permanent_tax$Taxonomy),';',fixed = TRUE)),row.names = 1)[, c(1, 3, 5, 7, 9, 11)];dim(permanent_tax)
-permanent_tax <- permanent_tax[colnames(permanent_otu), ];dim(permanent_tax)
-colnames(permanent_tax) <- c("domain", "phylum", "class", "order", "family", "genus")
-
-# verify if variables are correctly interpreted 
-summary(permanent_var)
-
-# double check if data frames match
-unique(row.names(permanent_otu) == row.names(permanent_var)) 
-
-# (optional) reduce to some proportion most abundant taxa to save computation time
-permanent_otu_sub <- permanent_otu[, cumsum(colSums(permanent_otu))/sum(colSums(permanent_otu)) < 0.95 & 
-                               colSums(permanent_otu != 0)/nrow(permanent_otu) > 0.25];dim(permanent_otu_sub)
-permanent_tax_sub <- permanent_tax[colnames(permanent_otu_sub), ];dim(permanent_tax_sub)
-
-# aggregating to higher taxonomic ranks
-permanent_gen <- aggregate(t(permanent_otu), by = permanent_tax[, c(1:6)], FUN = "sum");dim(permanent_gen)
-rownames(permanent_gen) <- paste(permanent_gen$phylum, permanent_gen$genus, 1:nrow(permanent_gen), sep = "_")
-permanent_fam <- aggregate(t(permanent_otu), by = permanent_tax[, c(1:5)], FUN = "sum");dim(permanent_fam)
-rownames(permanent_fam) <- paste(permanent_fam$phylum, permanent_fam$fam, 1:nrow(permanent_fam), sep = "_")
-permanent_ord <- aggregate(t(permanent_otu), by = permanent_tax[, c(1:4)], FUN = "sum");dim(permanent_ord)
-rownames(permanent_ord) <- paste(permanent_ord$phylum, permanent_ord$order, 1:nrow(permanent_ord), sep = "_")
-permanent_cls <- aggregate(t(permanent_otu), by = permanent_tax[, c(1:3)], FUN = "sum");dim(permanent_cls)
-rownames(permanent_cls) <- paste(permanent_cls$phylum, permanent_cls$class, 1:nrow(permanent_cls), sep = "_")
-permanent_phl <- aggregate(t(permanent_otu), by = permanent_tax[, c(1:2)], FUN = "sum");dim(permanent_phl)
-rownames(permanent_phl) <- paste(permanent_phl$phylum, permanent_phl$phylum, 1:nrow(permanent_phl), sep = "_")
+# Reduced to 95% cumulative most abundant OTUs of at least 0.25 prevelance
+permanent_tax_sub <- permanent_tax[cumsum(permanent_tax$abundance) < .95 & permanent_tax$occupancy > .25, ];dim(permanent_tax_sub)
+permanent_otu_sub <- permanent_otu[, rownames(permanent_tax_sub)];dim(permanent_otu_sub)
+permanent_ko_sub <- permanent_ko[, cumsum(colSums(permanent_ko))/sum(colSums(permanent_ko)) < 0.5];dim(permanent_ko_sub)
 
 ### subset data for "seasonal core" to sample_type == "alga" and t6, t1 (winter) and t3, t4 (summer) only
-season_var <- droplevels(permanent_var[permanent_var$sample_type == "alga" & permanent_var$timepoint != "t2" & permanent_var$timepoint != "t5", ]);dim(season_var)
-season_otu <- permanent_otu_sub[rownames(season_var), colSums(permanent_otu_sub[rownames(permanent_var), ]) > 0];dim(season_otu)
-all.equal(row.names(season_otu), row.names(season_var)) 
+season_var    <- droplevels(permanent_var[permanent_var$sample_type == "alga" & permanent_var$timepoint != "t2" & permanent_var$timepoint != "t5", ]);dim(season_var)
+season_otu    <- permanent_otu_sub[rownames(season_var), colSums(permanent_otu_sub[rownames(permanent_var), ]) > 0];dim(season_otu)
+season_ko     <- permanent_ko_sub[rownames(season_var), ];dim(season_ko)
 
-season_gen <- cbind(permanent_gen[, 1:6], permanent_gen[, rownames(season_var)]);dim(season_gen)
-season_fam <- cbind(permanent_fam[, 1:5], permanent_fam[, rownames(season_var)]);dim(season_fam)
-season_ord <- cbind(permanent_ord[, 1:4], permanent_ord[, rownames(season_var)]);dim(season_ord)
-season_cls <- cbind(permanent_cls[, 1:3], permanent_cls[, rownames(season_var)]);dim(season_cls)
-season_phl <- cbind(permanent_phl[, 1:2], permanent_phl[, rownames(season_var)]);dim(season_phl)
-
-### make a new variable season with two levels (summer and winter)
+### create new variable season with two levels (summer and winter)
 season_var$season <- with(season_var, ifelse(timepoint == "t6", "winter", ifelse(timepoint == "t1", "winter", "summer")))
+permanent_var$otu_PIE  <- calc_PIE(permanent_otu)
+permanent_var$otu_rich <- calc_comm_div(permanent_otu, index = "S")[1:262, "value"]
+permanent_var$ko_PIE   <- calc_PIE(round(permanent_ko))
+permanent_var$ko_rich  <- calc_comm_div(permanent_ko, index = "S")[1:262, "value"]
+alga_var <- droplevels(permanent_var[permanent_var$sample_type == "alga", ]);dim(alga_var)
+alga_rar <- droplevels(permanent_rar[permanent_var$sample_type == "alga", ])
+alga_rar <- alga_rar[,colSums(alga_rar) >0 ];dim(alga_rar)
+alga_ko <- droplevels(permanent_ko[permanent_var$sample_type == "alga", ]);dim(alga_ko)
+alga_ko <- alga_ko[, colSums(alga_ko) > 0 ];dim(alga_ko)
+alga_ko_rar <- droplevels(permanent_ko_rar[permanent_var$sample_type == "alga", ]);
+alga_ko_rar <- alga_ko_rar[, colSums(alga_ko_rar) >0 ];dim(alga_ko_rar)
 
 ##########################
 
 
-##### FIT mGLMs permanent CORES #####
-permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "alga")
-permanent_alg_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year_timepoint, family = "negative.binomial", data = permanent_var)
-levels(permanent_alg_otu_mglm$data$sample_type)
+#### DIVERSITY ####
+glm_otu_rich   <- glm(otu_rich ~ log(seq_depth) + timepoint * year * pop, data = alga_var, 
+                      family = gaussian(link = "identity"), na.action = na.fail)
+qqPlot(resid(glm_otu_rich), pch = 19, col.lines = 1)
+Anova(glm_otu_rich)
+glm_otu_rich_pp <- emmeans(glm_otu_rich, pairwise ~ timepoint);glm_otu_rich_pp
+glm_otu_rich_effect_general <- data.frame(effect(glm_otu_rich, term = "timepoint"))
+glm_otu_rich_effect_pop <- data.frame(effect(glm_otu_rich, term = "timepoint:pop"))
+glm_otu_rich_pseudo_R2 <- 1-(glm_otu_rich$deviance/glm_otu_rich$null.deviance);glm_otu_rich_pseudo_R2
 
-permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "sediment")
-permanent_sed_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year_timepoint, family = "negative.binomial", data = permanent_var)
-levels(permanent_sed_otu_mglm$data$sample_type)
+# plots
+plot_otu_rich <- ggplot(glm_otu_rich_effect_pop, aes(x = timepoint, y = fit)) +
+  geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
+  geom_line(data = glm_otu_rich_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_errorbar(data = glm_otu_rich_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black") +  
+  geom_point(data = glm_otu_rich_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
+  ylim(0, 3000) + 
+  ylab("OTUs") +
+  scale_color_manual(values = c("#0670a4","#84af2b","#ad2b03","#e38434","#fbc005","#77c6e3")) +
+  scale_fill_manual(values = c("white", "black")) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent"),
+        panel.border = element_rect(fill = "transparent", colour = "black", linewidth = .1),
+        axis.ticks.length = unit(.1, "mm"),
+        axis.ticks.x = element_line(colour = "#333333", linewidth = .1),
+        axis.ticks.y = element_line(colour = "#333333", linewidth = .1));plot_otu_rich
 
-permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "water")
-permanent_wat_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year_timepoint, family = "negative.binomial", data = permanent_var)
-permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "alga")
+glm_otu_PIE   <- glm(logit(otu_PIE) ~ timepoint * year * pop, data = alga_var, 
+                      family = gaussian(link = "identity"), na.action = na.fail)
+qqPlot(resid(glm_otu_PIE), pch = 19, col.lines = 1)
+Anova(glm_otu_PIE)
+glm_otu_PIE_pp <- emmeans(glm_otu_PIE, pairwise ~ timepoint);glm_otu_PIE_pp
+glm_otu_PIE_effect_general <- data.frame(effect(glm_otu_PIE, term = "timepoint"))
+glm_otu_PIE_effect_pop <- data.frame(effect(glm_otu_PIE, term = "timepoint:pop"))
+glm_otu_PIE_pseudo_R2 <- 1-(glm_otu_PIE$deviance/glm_otu_PIE$null.deviance);glm_otu_PIE_pseudo_R2
 
-levels(permanent_wat_otu_mglm$data$sample_type)
+# plots
+plot_otu_PIE <- ggplot(glm_otu_PIE_effect_pop, aes(x = timepoint, y = fit)) +
+  geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
+  geom_line(data = glm_otu_PIE_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_errorbar(data = glm_otu_PIE_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black",position = position_dodge(width = 0.5)) +  
+  geom_point(data = glm_otu_PIE_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
+  ylim(2, 5) + 
+  ylab("OTU logit PIE") +
+  scale_color_manual(values = c("#0670a4","#84af2b","#ad2b03","#e38434","#fbc005","#77c6e3")) +
+  scale_fill_manual(values = c("white", "black")) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent"),
+        panel.border = element_rect(fill = "transparent", colour = "black", linewidth = .1),
+        axis.ticks.length = unit(.1, "mm"),
+        axis.ticks.x = element_line(colour = "#333333", linewidth = .1),
+        axis.ticks.y = element_line(colour = "#333333", linewidth = .1));plot_otu_PIE
 
-### save and load the output to load model instantly next time
-#save(permanent_alg_otu_mglm, file = "C:/chantal/analysis/Rdata/permanent_alg_otu_mglm.Rdata") # save model to call it next time directly
-#save(permanent_sed_otu_mglm, file = "C:/chantal/analysis/Rdata/permanent_sed_otu_mglm.Rdata") # save model to call it next time directly
-#save(permanent_wat_otu_mglm, file = "C:/chantal/analysis/Rdata/permanent_wat_otu_mglm.Rdata") # save model to call it next time directly
-load(file = "C:/chantal/analysis/Rdata/permanent_alg_otu_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/permanent_sed_otu_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/permanent_wat_otu_mglm.Rdata") # load saved model
+glm_ko_rich   <- glm(ko_rich ~ log(seq_depth) + timepoint * year * pop, data = alga_var, 
+                      family = gaussian(link = "identity"), na.action = na.fail)
+qqPlot(resid(glm_ko_rich), pch = 19, col.lines = 1)
+Anova(glm_ko_rich)
+glm_ko_rich_pp <- emmeans(glm_ko_rich, pairwise ~ timepoint);glm_ko_rich_pp
+glm_ko_rich_effect_general <- data.frame(effect(glm_ko_rich, term = "timepoint"))
+glm_ko_rich_effect_pop <- data.frame(effect(glm_ko_rich, term = "timepoint:pop"))
+glm_ko_rich_pseudo_R2 <- 1-(glm_ko_rich$deviance/glm_ko_rich$null.deviance);glm_ko_rich_pseudo_R2
+
+# plots
+plot_ko_rich <- ggplot(glm_ko_rich_effect_pop, aes(x = timepoint, y = fit)) +
+  geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
+  geom_line(data = glm_ko_rich_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_errorbar(data = glm_ko_rich_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black",position = position_dodge(width = 0.5)) +  
+  geom_point(data = glm_ko_rich_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
+  ylim(6000, 6800) + 
+  ylab("KOs") +
+  scale_color_manual(values = c("#0670a4","#84af2b","#ad2b03","#e38434","#fbc005","#77c6e3")) +
+  scale_fill_manual(values = c("white", "black")) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent"),
+        panel.border = element_rect(fill = "transparent", colour = "black", linewidth = .1),
+        axis.ticks.length = unit(.1, "mm"),
+        axis.ticks.x = element_line(colour = "#333333", linewidth = .1),
+        axis.ticks.y = element_line(colour = "#333333", linewidth = .1));plot_ko_rich
+
+glm_ko_PIE   <- glm(logit(ko_PIE) ~ timepoint * year * pop, data = alga_var, 
+                      family = gaussian(link = "identity"), na.action = na.fail)
+qqPlot(resid(glm_ko_PIE), pch = 19, col.lines = 1)
+Anova(glm_ko_PIE)
+glm_ko_PIE_pp <- emmeans(glm_ko_PIE, pairwise ~ timepoint);glm_ko_PIE_pp
+glm_ko_PIE_effect_general <- data.frame(effect(glm_ko_PIE, term = "timepoint"))
+glm_ko_PIE_effect_pop <- data.frame(effect(glm_ko_PIE, term = "timepoint:pop"))
+glm_ko_PIE_pseudo_R2 <- 1-(glm_ko_PIE$deviance/glm_ko_PIE$null.deviance);glm_ko_PIE_pseudo_R2
+
+# plots
+plot_ko_PIE <- ggplot(glm_ko_PIE_effect_pop, aes(x = timepoint, y = fit)) +
+  geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
+  geom_line(data = glm_ko_PIE_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_errorbar(data = glm_ko_PIE_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black",position = position_dodge(width = 0.5)) +  
+  geom_point(data = glm_ko_PIE_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
+  ylim(7.2, 7.45) + 
+  ylab("KO logit PIE") +
+  scale_color_manual(values = c("#0670a4","#84af2b","#ad2b03","#e38434","#fbc005","#77c6e3")) +
+  scale_fill_manual(values = c("white", "black")) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent"),
+        panel.border = element_rect(fill = "transparent", colour = "black", linewidth = .1),
+        axis.ticks.length = unit(.1, "mm"),
+        axis.ticks.x = element_line(colour = "#333333", linewidth = .1),
+        axis.ticks.y = element_line(colour = "#333333", linewidth = .1));plot_ko_PIE
+
+ggarrange(plot_otu_rich, plot_otu_PIE, plot_ko_rich, plot_ko_PIE)
+
+##################
+
+
+##### mGLMs permanent CORES ####
+
+### for each level in sample_type an mGLMs as reference level
+#permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "alga")
+#permanent_alg_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year, family = "negative.binomial", data = permanent_var)
+#save(permanent_alg_otu_mglm, file = "permanent_alg_otu_mglm.Rdata") # load saved model
+load(file = "permanent_alg_otu_mglm.Rdata") # load saved model
+
+#permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "sediment")
+#permanent_sed_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year, family = "negative.binomial", data = permanent_var)
+#save(permanent_sed_otu_mglm, file = "permanent_sed_otu_mglm.Rdata") # load saved model
+load(file = "permanent_sed_otu_mglm.Rdata") # load saved model
+
+#permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "water")
+#permanent_wat_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year, family = "negative.binomial", data = permanent_var)
+#save(permanent_wat_otu_mglm, file = "permanent_wat_otu_mglm.Rdata") # load saved model
+load(file = "permanent_wat_otu_mglm.Rdata") # load saved model
 
 #permanent_alg_otu_mglm_s <- summary.manyglm(permanent_alg_otu_mglm, nBoot = 999, block = permanent_alg_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
+#save(permanent_alg_otu_mglm_s, file = "permanent_alg_otu_mglm_s.Rdata") # load saved model
+load(file = "permanent_alg_otu_mglm_s.Rdata")
+
 #permanent_sed_otu_mglm_s <- summary.manyglm(permanent_sed_otu_mglm, nBoot = 999, block = permanent_sed_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
+#save(permanent_sed_otu_mglm_s, file = "permanent_sed_otu_mglm_s.Rdata") # load saved model
+load(file = "permanent_sed_otu_mglm_s.Rdata")
+
 #permanent_wat_otu_mglm_s <- summary.manyglm(permanent_wat_otu_mglm, nBoot = 999, block = permanent_wat_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#save(permanent_alg_otu_mglm_s, file = "C:/chantal/analysis/Rdata/permanent_alg_otu_mglm_s.Rdata")
-#save(permanent_sed_otu_mglm_s, file = "C:/chantal/analysis/Rdata/permanent_sed_otu_mglm_s.Rdata")
-#save(permanent_wat_otu_mglm_s, file = "C:/chantal/analysis/Rdata/permanent_wat_otu_mglm_s.Rdata")
-
-load(file = "C:/chantal/analysis/Rdata/permanent_alg_otu_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/permanent_sed_otu_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/permanent_wat_otu_mglm_s.Rdata")
-
-#################################
-
-
-##### GET permanent CORE OTUs ##### 
+#save(permanent_wat_otu_mglm_s, file = "permanent_wat_otu_mglm_s.Rdata") # load saved model
+load(file = "permanent_wat_otu_mglm_s.Rdata")
 
 permanent_alg_core <- permanent.core(permanent_alg_otu_mglm, permanent_alg_otu_mglm_s, p = 0.01, coef = 0, pooled = F, p.adjust = "fdr");dim(permanent_alg_core)
 permanent_sed_core <- permanent.core(permanent_sed_otu_mglm, permanent_sed_otu_mglm_s, p = 0.01, coef = 0, pooled = F, p.adjust = "fdr");dim(permanent_sed_core)
@@ -264,44 +369,19 @@ permanent_wat_core_otu <- permanent.core(permanent_wat_otu_mglm, permanent_wat_o
 # plot coefficients and corresponding confidence intervals
 {
 
-# asthetics 
-{
-theme <- theme(legend.title = element_blank(),
-               axis.title.x=element_blank(),
-               axis.title.y=element_blank(),
-               panel.grid.major = element_blank(), 
-               panel.grid.minor = element_blank(),
-               legend.position = "top",
-               panel.background = element_rect(fill = "transparent"),
-               panel.border = element_rect(fill = "transparent",colour = "black",linewidth = 1),
-               axis.ticks.length = unit(1, "mm"),
-               axis.ticks.x = element_line(colour="#333333", linewidth = 1),
-               axis.ticks.y = element_line(colour="#333333", linewidth = 1))
-}
-
-  gg_permanent_alg_otu_sw <-  ggplot(permanent_alg_core,
-                                     aes(x = reorder(taxon, coefficient, col = sample_type), y = coefficient)) + 
-    geom_errorbar(aes(ymin = lower, ymax = upper, col = sample_type), alpha = .5, width = 0, linewidth = 2) +
-    geom_point(aes(y = coefficient, col = sample_type), size = 2) +
-    coord_flip() +
-    geom_hline(yintercept=0, linetype="dashed", color = "red",linewidth = 0.75) + theme +
-    ggtitle("fold change with respect to alga + 99%CIs");gg_permanent_alg_otu_sw
-  
-  gg_permanent_sed_otu_sw <-  ggplot(permanent_sed_core[1:100, ],
-                                     aes(x = reorder(taxon, coefficient, col = sample_type), y = coefficient)) + 
-    geom_errorbar(aes(ymin = lower, ymax = upper, col = sample_type), alpha = .5, width = 0, linewidth = 2) +
-    geom_point(aes(y = coefficient, col = sample_type), size = 2) +
-    coord_flip() +
-    geom_hline(yintercept=0, linetype="dashed", color = "red",linewidth = 0.75) + theme +
-    ggtitle("fold change with respect to alga + 99%CIs");gg_permanent_sed_otu_sw
-  
-  gg_permanent_wat_otu_sw <-  ggplot(permanent_wat_core,
-                                     aes(x = reorder(taxon, coefficient, col = sample_type), y = coefficient)) + 
-    geom_errorbar(aes(ymin = lower, ymax = upper, col = sample_type), alpha = .5, width = 0, linewidth = 2) +
-    geom_point(aes(y = coefficient, col = sample_type), size = 2) +
-    coord_flip() +
-    geom_hline(yintercept=0, linetype="dashed", color = "red",linewidth = 0.75) + theme +
-    ggtitle("fold change with respect to alga + 99%CIs");gg_permanent_wat_otu_sw
+  # aesthetics 
+  {
+    theme <- theme(legend.title = element_blank(),
+                   axis.title.x=element_blank(),
+                   axis.title.y=element_blank(),
+                   panel.grid.major = element_blank(), 
+                   panel.grid.minor = element_blank(),
+                    panel.background = element_rect(fill = "transparent"),
+                   panel.border = element_rect(fill = "transparent",colour = "black",linewidth = 1),
+                   axis.ticks.length = unit(1, "mm"),
+                   axis.ticks.x = element_line(colour="#333333", linewidth = 1),
+                   axis.ticks.y = element_line(colour="#333333", linewidth = 1))
+    }
   
   gg_permanent_alg_otu <- ggplot(permanent_alg_core_otu[1:25, ],
                                  aes(x = reorder(taxon, -averaged_coefficient, y = -averaged_coefficient))) +
@@ -309,7 +389,7 @@ theme <- theme(legend.title = element_blank(),
     geom_point(aes(y = -averaged_coefficient), size = 2) +
     coord_flip() +
     geom_hline(yintercept = 0, linetype = "dashed", color = "red",size = 0.75) + theme +
-    ggtitle("permanent algal core - OTUs");gg_permanent_alg_otu
+    ggtitle("permanent algal core - fold change + 99%CIs");gg_permanent_alg_otu
 
   gg_permanent_sed_otu <- ggplot(permanent_sed_core_otu[1:25, ],
                                  aes(x = reorder(taxon, -averaged_coefficient, y = -averaged_coefficient))) +
@@ -317,7 +397,7 @@ theme <- theme(legend.title = element_blank(),
     geom_point(aes(y = -averaged_coefficient), size = 2) +
     coord_flip() +
     geom_hline(yintercept = 0, linetype = "dashed", color = "red",size = 0.75) + theme +
-    ggtitle("permanent sediment core - OTUs");gg_permanent_sed_otu
+    ggtitle("permanent sediment core - fold change + 99%CIs");gg_permanent_sed_otu
   
   gg_permanent_wat_otu <- ggplot(permanent_wat_core_otu[1:25, ],
                                  aes(x = reorder(taxon, -averaged_coefficient, y = -averaged_coefficient))) +
@@ -325,57 +405,20 @@ theme <- theme(legend.title = element_blank(),
     geom_point(aes(y = -averaged_coefficient), size = 2) +
     coord_flip() +
     geom_hline(yintercept = 0, linetype = "dashed", color = "red",size = 0.75) + theme +
-    ggtitle("permanent water core - OTUs");gg_permanent_wat_otu
+    ggtitle("permanent water core - fold change + 99%CIs");gg_permanent_wat_otu
   }
-################################
+###############################
 
 
-##### FIT mGLMs SEASONAL CORES ##### 
-
-# 1) fitting
-#season_otu_mglm <- manyglm(mvabund(season_otu)               ~ offset(log(seq_depth)) + season + year_timepoint, family = "negative.binomial", data = season_var)
-#season_gen_mglm <- manyglm(mvabund(t(season_gen[, -c(1:6)])) ~ offset(log(seq_depth)) + season + year_timepoint, family = "negative.binomial", data = season_var)
-#season_fam_mglm <- manyglm(mvabund(t(season_fam[, -c(1:5)])) ~ offset(log(seq_depth)) + season + year_timepoint, family = "negative.binomial", data = season_var)
-#season_ord_mglm <- manyglm(mvabund(t(season_ord[, -c(1:4)])) ~ offset(log(seq_depth)) + season + year_timepoint, family = "negative.binomial", data = season_var)
-#season_cls_mglm <- manyglm(mvabund(t(season_cls[, -c(1:3)])) ~ offset(log(seq_depth)) + season + year_timepoint, family = "negative.binomial", data = season_var)
-#season_phl_mglm <- manyglm(mvabund(t(season_phl[, -c(1:2)])) ~ offset(log(seq_depth)) + season + year_timepoint, family = "negative.binomial", data = season_var)
-#save(season_otu_mglm, file = "C:/chantal/analysis/Rdata/season_otu_mglm.Rdata") # save model to call it next time directly
-#save(season_gen_mglm, file = "C:/chantal/analysis/Rdata/season_gen_mglm.Rdata") # save model to call it next time directly
-#save(season_fam_mglm, file = "C:/chantal/analysis/Rdata/season_fam_mglm.Rdata") # save model to call it next time directly
-#save(season_ord_mglm, file = "C:/chantal/analysis/Rdata/season_ord_mglm.Rdata") # save model to call it next time directly
-#save(season_cls_mglm, file = "C:/chantal/analysis/Rdata/season_cls_mglm.Rdata") # save model to call it next time directly
-#save(season_phl_mglm, file = "C:/chantal/analysis/Rdata/season_phl_mglm.Rdata") # save model to call it next time directly
-load(file = "C:/chantal/analysis/Rdata/season_otu_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/season_gen_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/season_fam_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/season_ord_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/season_cls_mglm.Rdata") # load saved model
-load(file = "C:/chantal/analysis/Rdata/season_phl_mglm.Rdata") # load saved model
-
-### summary.manyglm() 
+##### mGLMs SEASONAL CORES #####
+#season_otu_mglm <- manyglm(mvabund(season_otu) ~ offset(log(seq_depth)) + season + year, family = "negative.binomial", data = season_var)
+#save(season_otu_mglm, file = "season_otu_mglm.Rdata") # save model to call it next time directly
+load(file = "season_otu_mglm.Rdata") # load saved model
 #season_otu_mglm_s <- summary.manyglm(season_otu_mglm, nBoot = 999, block = season_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#season_gen_mglm_s <- summary.manyglm(season_gen_mglm, nBoot = 999, block = season_gen_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#season_fam_mglm_s <- summary.manyglm(season_fam_mglm, nBoot = 999, block = season_fam_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#season_ord_mglm_s <- summary.manyglm(season_ord_mglm, nBoot = 999, block = season_ord_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#season_cls_mglm_s <- summary.manyglm(season_cls_mglm, nBoot = 999, block = season_cls_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#season_phl_mglm_s <- summary.manyglm(season_phl_mglm, nBoot = 999, block = season_phl_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#save(season_otu_mglm_s, file = "C:/chantal/analysis/Rdata/season_otu_mglm_s.Rdata")
-#save(season_gen_mglm_s, file = "C:/chantal/analysis/Rdata/season_gen_mglm_s.Rdata")
-#save(season_fam_mglm_s, file = "C:/chantal/analysis/Rdata/season_fam_mglm_s.Rdata")
-#save(season_ord_mglm_s, file = "C:/chantal/analysis/Rdata/season_ord_mglm_s.Rdata")
-#save(season_cls_mglm_s, file = "C:/chantal/analysis/Rdata/season_cls_mglm_s.Rdata")
-#save(season_phl_mglm_s, file = "C:/chantal/analysis/Rdata/season_phl_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/season_otu_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/season_gen_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/season_fam_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/season_ord_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/season_cls_mglm_s.Rdata")
-load(file = "C:/chantal/analysis/Rdata/season_phl_mglm_s.Rdata")
+#save(season_otu_mglm_s, file = "season_otu_mglm_s.Rdata")
+load(file = "season_otu_mglm_s.Rdata")
 
-#################################
-
-
-##### GET SEASONAL CORE OTUs ##### 
+### GET SEASONAL CORE OTUs 
 season_core_otu <- seasonal.core(season_otu_mglm, season_otu_mglm_s, p = 0.01, coef = 0, p.adjust = "fdr");dim(season_core_otu)
 
 # exclude permanent sediment and water cores
@@ -384,21 +427,6 @@ season_core_otu <- season_core_otu[rownames(season_core_otu) %in% rownames(perma
 
 # plot coefficients and corresponding confidence intervals
 # aesthetics 
-{
-  theme <- theme(legend.title = element_blank(),
-                 axis.title.x = element_blank(),
-                 axis.title.y = element_blank(),
-                 panel.grid.major = element_blank(), 
-                 panel.grid.minor = element_blank(),
-                 #legend.position = "top",
-                 panel.background = element_rect(fill = "transparent"),
-                 panel.border = element_rect(fill = "transparent",colour = "black", linewidth = 1),
-                 axis.ticks.length = unit(1, "mm"),
-                 axis.ticks.x = element_line(colour = "#333333", linewidth = 1),
-                 axis.ticks.y = element_line(colour = "#333333", linewidth = 1))
-}
-
-
 gg_season_otu_sw <-  ggplot(season_core_otu[1:50, ],
                             aes(x = reorder(taxon, -coefficient), y = coefficient)) + 
   geom_errorbar(aes(ymin = lower, ymax = upper, col = core), alpha = .5, width = 0, linewidth = 2) +
@@ -407,14 +435,14 @@ gg_season_otu_sw <-  ggplot(season_core_otu[1:50, ],
   geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 0.75) + theme +
   ggtitle("fold change with respect to season + 99%CIs");gg_season_otu_sw
 
-################################
+##############################
 
 
-##### FIGURES PAPER #####
-
+##### CORES - FIGURE 5D-F & TABLE S6 #####
 permanent_alg_core_otu$label <- paste(permanent_alg_core_otu$taxon,
                                       permanent_tax_sub[permanent_alg_core_otu$taxon, "genus"])
 
+### figure 5D
 gg_permanent_otu_sw <- ggplot(permanent_alg_core_otu[1:25, ],
                          aes(x = reorder(label, -averaged_coefficient), y = -averaged_coefficient)) +
   geom_errorbar(aes(ymin = -pooled_lower, ymax = -pooled_upper), col = "darkgreen", alpha = .5, width = 0, linewidth = 2) +
@@ -425,6 +453,7 @@ gg_permanent_otu_sw <- ggplot(permanent_alg_core_otu[1:25, ],
 
 season_core_otu$label <- paste(season_core_otu$taxon, permanent_tax_sub[season_core_otu$taxon, "genus"])
   
+### figure 5E
 gg_summer_otu_sw <-  ggplot(season_core_otu[season_core_otu$core == "summer", ][1:25, ],
                             aes(x = reorder(label, -coefficient), y = -coefficient)) + 
   geom_errorbar(aes(ymin = -lower, ymax = -upper), col = "darkred", alpha = .5, width = 0, linewidth = 2) +
@@ -433,6 +462,7 @@ gg_summer_otu_sw <-  ggplot(season_core_otu[season_core_otu$core == "summer", ][
   geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 0.75) + theme +
   ggtitle("Summer");gg_summer_otu_sw
 
+### figure 5F
 gg_winter_otu_sw <-  ggplot(season_core_otu[season_core_otu$core == "winter", ][1:25, ],
                             aes(x = reorder(label, coefficient), y = coefficient)) + 
   geom_errorbar(aes(ymin = lower, ymax = upper), col = "darkblue", alpha = .5, width = 0, linewidth = 2) +
@@ -440,20 +470,12 @@ gg_winter_otu_sw <-  ggplot(season_core_otu[season_core_otu$core == "winter", ][
   coord_flip() +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 0.75) + theme +
   ggtitle("winter");gg_winter_otu_sw
-#######################
 
-
-##### TABLE S6 ####
-
-# core table excluding sediment and water samples
+### mGLM input TABLE S6
 core_table <- permanent_tax
 core_table$otu <- rownames(core_table)
-core_table[, "abundance"] <- colSums(permanent_otu[, rownames(core_table)]/rowSums(permanent_otu[, rownames(core_table)]))/nrow(permanent_otu)
-core_table[, "occurrence"] <- colSums(permanent_otu[permanent_var$sample_type == "alga", rownames(core_table)] != 0)/nrow(permanent_otu[permanent_var$sample_type == "alga", rownames(core_table)])
-#with(core_table, plot(log10(abundance), occurrence))
-
-core_table[, "occurrence_permanent"] <- ifelse((colSums(permanent_otu[permanent_var$sample_type == "alga", rownames(core_table)] != 0)/nrow(permanent_otu[permanent_var$sample_type == "alga", rownames(core_table)]) == 1) == TRUE, "epi", "")
-core_table[, "occurrence_season"]    <- ifelse(!rownames(core_table) %in% colnames(permanent_otu_sub),"",
+core_table[, "occupancy_permanent"] <- ifelse((colSums(permanent_otu[permanent_var$sample_type == "alga", rownames(core_table)] != 0)/nrow(permanent_otu[permanent_var$sample_type == "alga", rownames(core_table)]) == 1) == TRUE, "epi", "")
+core_table[, "occupancy_season"]    <- ifelse(!rownames(core_table) %in% colnames(permanent_otu_sub),"",
                                               ifelse((colSums(season_otu[season_var$sample_type == "alga" & (season_var$timepoint == "t6" | season_var$timepoint == "t1"), 
                                                                   colnames(permanent_otu_sub) %in% rownames(core_table)] != 0)/nrow(season_otu[season_var$sample_type == "alga" & 
                                                                                                                 (season_var$timepoint == "t6" | season_var$timepoint == "t1"), 
@@ -473,191 +495,141 @@ for(i in 1:nrow(core_table)) {
                                 ifelse(rownames(permanent_tax[i, ]) %in% permanent_sed_core_otu$taxon, permanent_sed_core_otu[permanent_sed_core_otu$taxon == rownames(permanent_tax[i, ]), "p_val_fisher"], 
                                 ifelse(rownames(permanent_tax[i, ]) %in% permanent_wat_core_otu$taxon, permanent_wat_core_otu[permanent_wat_core_otu$taxon == rownames(permanent_tax[i, ]), "p_val_fisher"], "")))
   }
-
 for(i in 1:nrow(core_table)) {
   core_table[i, "season"] <- ifelse(rownames(permanent_tax[i, ]) %in% season_core_otu$taxon, season_core_otu[rownames(permanent_tax[i, ]), "core"], "")
   core_table[i, "seas_coef"] <- ifelse(rownames(permanent_tax[i, ]) %in% season_core_otu$taxon, season_core_otu[rownames(permanent_tax[i, ]), "coefficient"], "")
   core_table[i, "seas_p"] <- ifelse(rownames(permanent_tax[i, ]) %in% season_core_otu$taxon, season_core_otu[rownames(permanent_tax[i, ]), "p_val_s"], "")
 }
 
-View(core_table)
 
-write.csv(core_table[order(core_table$occurrence, decreasing = T), ], file = "C:/chantal/analysis/core_table.csv")
-
-
-##################
+########################################
 
 
-#### DIVERSITY ####
-permanent_var$otu_chao <- ChaoRichness(t(permanent_otu))[, 2]
-permanent_var$otu_PIE <- calc_PIE(permanent_otu, ENS = F)
-permanent_var$ko_chao <- ChaoRichness(t(permanent_ko))[, 2]
-permanent_var$ko_PIE <- calc_PIE(permanent_ko, ENS = F)
+##### NMDS #####
 
-alga_var <- droplevels(permanent_var[permanent_var$sample_type == "alga", ]);dim(alga_var)
+# nmds OTU
+#alga_nmds1 <- metaMDS(alga_rar, distance = "bray", trymax = 200, try = 100, autotransform = F)
+#alga_nmds2 <- metaMDS(alga_rar, distance = "bray", trymax = 200, try = 100, autotransform = F, previous.best = alga_nmds1)
+#save(alga_nmds2, file= "alga_nmds2.Rdata")
+load("alga_nmds2.Rdata")
+alga_nmds2
 
-glm_otu_chao   <- glm(otu_chao ~ log(seq_depth)+ timepoint * year_timepoint * pop, data = alga_var, family = gaussian(link= "log"), na.action = na.fail)
-plot(simulateResiduals(fittedModel = glm_otu_chao , n = 1000))
-Anova(glm_otu_chao)
-glm_otu_chao_effect <- data.frame(emmeans(glm_otu_chao, specs = "timepoint"));glm_otu_chao_effect
-glm_otu_chao_pp <- emmeans(glm_otu_chao, pairwise ~ timepoint)
-glm_otu_chao_pseudo_R2 <- 1-(glm_otu_chao$deviance/glm_otu_chao$null.deviance); glm_otu_chao_pseudo_R2
+alga_env <- envfit(alga_nmds2, alga_var[, c("pH", "salinity", "temperature", "day_length")], permutations = 9999, na.rm = TRUE)
 
+# Basic NMDS plot
+custom_colors <- c("#036aaa", "#85af31", "#ad2c03", "#ec8935", "#fcc601", "#79c7db")
 
-glm_otu_PIE   <- glm(logit(otu_PIE) ~ log(seq_depth)+ timepoint * year_timepoint * pop, data = alga_var, family = gaussian(link= "identity"), na.action = na.fail)
-plot(simulateResiduals(fittedModel = glm_otu_PIE , n = 1000))
-Anova(glm_otu_PIE)
-glm_otu_PIE_effect <- data.frame(emmeans(glm_otu_PIE, specs = "timepoint"));glm_otu_PIE_effect
-glm_otu_PIE_pp <- emmeans(glm_otu_PIE, pairwise ~ timepoint)
-glm_otu_PIE_pseudo_R2 <- 1-(glm_otu_PIE$deviance/glm_otu_PIE$null.deviance); glm_otu_PIE_pseudo_R2
+# Plot with custom colors for timepoint
+plot(alga_nmds2$points, 
+     col = custom_colors[as.factor(alga_var$timepoint)],
+     pch = ifelse(alga_var$pop == "nor" & alga_var$year == "year1", 22, 
+           ifelse(alga_var$pop == "nor" & alga_var$year == "year2", 2, 
+           ifelse(alga_var$pop == "nor" & alga_var$year == "year3", 1, 
+           ifelse(alga_var$pop == "hei" & alga_var$year == "year1", 15, 
+           ifelse(alga_var$pop == "hei" & alga_var$year == "year2", 17, 19))))),
+     cex = 1.5, xlab = "NMDS1", ylab = "NMDS2", main = "OTU")
 
+legend("topright", legend = c("Year 1 (nor)", "Year 2 (nor)", "Year 3 (nor)", "Year 1 (hei)", "Year 2 (hei)", "Year 3 (hei)"), pch = c(22, 2, 1, 15, 17, 19), pt.cex = 1.5, title = "Year and Pop", cex = 0.8, bty = "n")
+legend("bottomleft", legend = c("t1", "t2", "t3", "t4", "t5", "t6"), fill = custom_colors[as.factor(c("t1", "t2", "t3", "t4", "t5", "t6"))], title = "season", cex = 1, bty = "n")  # Remove border around legend
 
-glm_ko_chao   <- glm(ko_chao ~ log(seq_depth)+ timepoint * year_timepoint * pop, data = alga_var, family = gaussian(link= "log"), na.action = na.fail)
-plot(simulateResiduals(fittedModel = glm_ko_chao , n = 1000))
-Anova(glm_ko_chao)
-glm_ko_chao_effect <- data.frame(emmeans(glm_ko_chao, specs = "timepoint"));glm_ko_chao_effect
-glm_ko_chao_pp <- emmeans(glm_ko_chao, pairwise ~ timepoint)
-glm_otu_chao_pseudo_R2 <- 1-(glm_ko_chao$deviance/glm_ko_chao$null.deviance); glm_otu_chao_pseudo_R2
+# envfit vectors
+env_scores <- scores(alga_env, display = "vectors") * .5
+arrows(1.5, 0.5, 1.5 + env_scores[, "NMDS1"], 0.5 + env_scores[, "NMDS2"], col = "black", lwd = 2, length = 0.1)
+text(1.5 + env_scores[, "NMDS1"], 0.5 + env_scores[, "NMDS2"], labels = rownames(env_scores), col = "black", cex = 1.2, pos = 4)
 
+#add ellipse
+{
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t1 nor", col = "#036aaa", lwd = 2, kind = "se", conf = 0.95)  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t2 nor", col = "#85af31", lwd = 2, kind = "se", conf = 0.95)  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t3 nor", col = "#ad2c03", lwd = 2, kind = "se", conf = 0.95)  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t4 nor", col = "#ec8935", lwd = 2, kind = "se", conf = 0.95)  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t5 nor", col = "#fcc601", lwd = 2, kind = "se", conf = 0.95)  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t6 nor", col = "#79c7db", lwd = 2, kind = "se", conf = 0.95)  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t1 hei", col = "#036aaa", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t2 hei", col = "#85af31", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t3 hei", col = "#ad2c03", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t4 hei", col = "#ec8935", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t5 hei", col = "#fcc601", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_nmds2, groups = paste(alga_var$timepoint, alga_var$pop), show.groups = "t6 hei", col = "#79c7db", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+}
 
-glm_ko_PIE   <- glm(logit(ko_PIE) ~ log(seq_depth)+ timepoint * year_timepoint * pop, data = alga_var, family = gaussian(link= "identity"), na.action = na.fail)
-plot(simulateResiduals(fittedModel = glm_ko_PIE , n = 1000))
-Anova(glm_ko_PIE, test.statistic = "LR")
-glm_ko_PIE_effect <- data.frame(emmeans(glm_ko_PIE, specs = "timepoint"));glm_ko_PIE_effect
-glm_ko_PIE_pp <- emmeans(glm_ko_PIE, pairwise ~ timepoint)
-glm_otu_chao_pseudo_R2 <- 1-(glm_ko_PIE$deviance/glm_ko_PIE$null.deviance); glm_otu_chao_pseudo_R2
+#trajectories
+group_names <- unique(paste(alga_var$year, alga_var$timepoint, alga_var$pop))
+centroids <- sapply(group_names, function(group) {
+  rows <- which(paste(alga_var$year, alga_var$timepoint, alga_var$pop) == group)
+  colMeans(alga_nmds2$points[rows, ])}, simplify = TRUE)
+centroid_matrix <- t(centroids)
+rownames(centroid_matrix) <- group_names
 
+trajectory_order_nor <- c("year1 t1 nor", "year1 t2 nor", "year1 t3 nor", "year1 t4 nor", "year1 t5 nor", "year1 t6 nor", "year2 t1 nor", "year2 t2 nor", "year2 t3 nor", "year2 t4 nor", "year2 t5 nor", "year2 t6 nor", "year3 t1 nor", "year3 t2 nor", "year3 t3 nor", "year3 t4 nor", "year3 t5 nor", "year3 t6 nor")
+trajectory_order_hei <- c("year1 t1 hei", "year1 t2 hei", "year1 t3 hei", "year1 t4 hei", "year1 t5 hei", "year1 t6 hei", "year2 t1 hei", "year2 t2 hei", "year2 t3 hei", "year2 t4 hei", "year2 t5 hei", "year2 t6 hei", "year3 t1 hei", "year3 t2 hei", "year3 t3 hei", "year3 t4 hei", "year3 t5 hei", "year3 t6 hei")
 
-### figures
-ggplot_glm_otu_chao <- ggplot(glm_otu_chao_effect, aes(x = timepoint, y = exp(emmean))) + 
-  geom_errorbar(aes(ymin = exp(lower.CL), ymax = exp(upper.CL)), width = 0, size = 1 , col = 1) +
-  geom_point(size=2, stroke=1, col=1) + 
-  ylim(c(0,4100)) +
-  theme(title = element_blank(),
-        legend.title = element_blank(),
-        axis.text.x = element_blank(),
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        legend.position = "none",
-        panel.background = element_rect(fill = "transparent"),
-        panel.border = element_rect(fill = "transparent",colour = "black",size = 1),
-        axis.ticks.length = unit(1, "mm"),
-        axis.ticks = element_line(colour="#333333",size = 1),
-        plot.margin = unit(c(1,1,1,1), "mm"))
+trajectory_centroids_nor <- centroid_matrix[trajectory_order_nor, ]
+lines(trajectory_centroids_nor[1:6, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 4)
+lines(trajectory_centroids_nor[6:12, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 2)
+lines(trajectory_centroids_nor[12:18, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 1)
 
-ggplot_glm_otu_PIE <- ggplot(glm_otu_PIE_effect, aes(x = timepoint, y = inv.logit(emmean))) + 
-  geom_errorbar(aes(ymin = inv.logit(lower.CL), ymax = inv.logit(upper.CL)), width = 0, size = 1 , col = 1) +
-  geom_point(size=2, stroke=1, col=1) + 
-  #ylim(c(0,4100)) +
-  theme(title = element_blank(),
-        legend.title = element_blank(),
-        axis.text.x = element_blank(),
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        legend.position = "none",
-        panel.background = element_rect(fill = "transparent"),
-        panel.border = element_rect(fill = "transparent",colour = "black",size = 1),
-        axis.ticks.length = unit(1, "mm"),
-        axis.ticks = element_line(colour="#333333",size = 1),
-        plot.margin = unit(c(1,1,1,1), "mm"))
-
-ggplot_glm_ko_chao <- ggplot(glm_ko_chao_effect, aes(x = timepoint, y = exp(emmean))) + 
-  geom_errorbar(aes(ymin = exp(lower.CL), ymax = exp(upper.CL)), width = 0, size = 1 , col = 1) +
-  geom_point(size=2, stroke=1, col=1) + 
-  theme(title = element_blank(),
-        legend.title = element_blank(),
-        axis.text.x = element_blank(),
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        legend.position = "none",
-        panel.background = element_rect(fill = "transparent"),
-        panel.border = element_rect(fill = "transparent",colour = "black",size = 1),
-        axis.ticks.length = unit(1, "mm"),
-        axis.ticks = element_line(colour="#333333",size = 1),
-        plot.margin = unit(c(1,1,1,1), "mm"))
-
-ggplot_glm_ko_PIE <- ggplot(glm_ko_PIE_effect, aes(x = timepoint, y = inv.logit(emmean))) + 
-  geom_errorbar(aes(ymin = inv.logit(lower.CL), ymax = inv.logit(upper.CL)), width = 0, size = 1 , col = 1) +
-  geom_point(size=2, stroke=1, col=1) + 
-  theme(title = element_blank(),
-        legend.title = element_blank(),
-        axis.text.x = element_blank(),
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        legend.position = "none",
-        panel.background = element_rect(fill = "transparent"),
-        panel.border = element_rect(fill = "transparent",colour = "black",size = 1),
-        axis.ticks.length = unit(1, "mm"),
-        axis.ticks = element_line(colour="#333333",size = 1),
-        plot.margin = unit(c(1,1,1,1), "mm"))
+trajectory_centroids_hei <- centroid_matrix[trajectory_order_hei, ]
+lines(trajectory_centroids_hei[1:6, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 4)
+lines(trajectory_centroids_hei[6:12, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 2)
+lines(trajectory_centroids_hei[12:18, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 1)
 
 
-library("egg")
-ggarrange(ggplot_glm_otu_chao,
-          ggplot_glm_otu_PIE,
-          ggplot_glm_ko_chao,
-          ggplot_glm_ko_PIE,
-          ncol=2,widths = c(1,1),
-          labels = c("A","B","C","D"),
-          label.args = list(gp = grid::gpar(font = 1, cex = 2), x=unit(1,"line")))
-ggsave(file="C:/chantal/figs/diversity.pdf",device="pdf",width = 85,height = 100,units="mm",
-       ggarrange(ggplot_glm_otu_chao,
-                 ggplot_glm_otu_PIE,
-                 ggplot_glm_ko_chao,
-                 ggplot_glm_ko_PIE,
-                 ncol=2,widths = c(1,1),
-                 labels = c("A","B","C","D"),
-                 label.args = list(gp = grid::gpar(font = 1, cex = 2), x=unit(1,"line"))))
+# nmds KO
+#alga_ko_nmds1 <- metaMDS(alga_ko_rar, distance = "bray", trymax = 200, try = 100, autotransform = F)
+#alga_ko_nmds2 <- metaMDS(alga_ko_rar, distance = "bray", trymax = 200, try = 100, autotransform = F, previous.best = alga_ko_nmds1)
+#save(alga_ko_nmds2, file= "alga_ko_nmds2.Rdata")
+load("alga_ko_nmds2.Rdata")
+alga_ko_nmds2
+alga_ko_env <- envfit(alga_ko_nmds2, alga_var[, c("pH", "salinity", "temperature", "day_length")], permutations = 9999, na.rm = TRUE)
+
+custom_colors <- c("#036aaa", "#85af31", "#ad2c03", "#ec8935", "#fcc601", "#79c7db")
+
+# Plot with custom colors for timepoint
+plot(alga_ko_nmds2$points, 
+     col = custom_colors[as.factor(alga_var$timepoint)], 
+     pch = ifelse(alga_var$pop == "nor" & alga_var$year == "year1", 22, 
+           ifelse(alga_var$pop == "nor" & alga_var$year == "year2", 2, 
+           ifelse(alga_var$pop == "nor" & alga_var$year == "year3", 1, 
+           ifelse(alga_var$pop == "hei" & alga_var$year == "year1", 15, 
+           ifelse(alga_var$pop == "hei" & alga_var$year == "year2", 17, 19))))), 
+   #  xlim = c(-.2, .2), ylim = c(-.2, .15),
+     cex = 1.5, xlab = "NMDS1", ylab = "NMDS2", main = "OTU")
+
+legend("bottomright", legend = c("Year 1 (nor)", "Year 2 (nor)", "Year 3 (nor)", "Year 1 (hei)", "Year 2 (hei)", "Year 3 (hei)"), pch = c(22, 2, 1, 15, 17, 19), pt.cex = 1.5, title = "Year and Pop", cex = 0.8, bty = "n")
+legend("bottomleft",  legend = c("t1", "t2", "t3", "t4", "t5", "t6"), fill = custom_colors[as.factor(c("t1", "t2", "t3", "t4", "t5", "t6"))], title = "season", cex = 1, bty = "n")
+
+# envfit vectors
+env_ko_scores <- scores(alga_ko_env, display = "vectors") * .25  # Automatically scales arrows appropriately
+arrows(-0.3, -0.2, env_ko_scores[, "NMDS1"] - 0.3, env_ko_scores[, "NMDS2"] - 0.2, col = "black", lwd = 2, length = 0.1)
+text(env_ko_scores[, "NMDS1"] - 0.3, env_ko_scores[, "NMDS2"] - 0.2, labels = rownames(env_ko_scores), col = "black", cex = 1.2, pos = 4)
 
 
-write.csv(
-  cbind(
-  data.frame(glm_otu_chao_pp$contrasts)[, c(1, 2, 5, 6)],
-  data.frame(glm_otu_PIE_pp$contrasts)[, c(2, 5, 6)],
-  data.frame(glm_ko_chao_pp$contrasts)[, c(2, 5, 6)],
-  data.frame(glm_ko_PIE_pp$contrasts)[, c(2, 5, 6)]),
-  file = "C:/chantal/analysis/post-hoc.csv")
+#add ellipses
+{
+  ordiellipse(alga_ko_nmds2, groups = alga_var$timepoint, show.groups = "t1", col = "#036aaa", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_ko_nmds2, groups = alga_var$timepoint, show.groups = "t2", col = "#85af31", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_ko_nmds2, groups = alga_var$timepoint, show.groups = "t3", col = "#ad2c03", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_ko_nmds2, groups = alga_var$timepoint, show.groups = "t4", col = "#ec8935", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_ko_nmds2, groups = alga_var$timepoint, show.groups = "t5", col = "#fcc601", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  ordiellipse(alga_ko_nmds2, groups = alga_var$timepoint, show.groups = "t6", col = "#79c7db", lwd = 2, kind = "se", conf = 0.95, draw = "polygon")  
+  }
 
+#trajectories
+group_names_ko <- unique(paste(alga_var$year, alga_var$timepoint))
+centroids_ko <- sapply(group_names_ko, function(group) {
+  rows <- which(paste(alga_var$year, alga_var$timepoint) == group)
+  colMeans(alga_ko_nmds2$points[rows, ])
+}, simplify = TRUE)
+centroid_matrix_ko <- t(centroids_ko)
+rownames(centroid_matrix_ko) <- group_names_ko
 
-############################
+trajectory_order_ko <- c("year1 t1", "year1 t2", "year1 t3", "year1 t4", "year1 t5", "year1 t6", "year2 t1", "year2 t2", "year2 t3", "year2 t4", "year2 t5", "year2 t6", "year3 t1", "year3 t2", "year3 t3", "year3 t4", "year3 t5", "year3 t6")
 
+trajectory_centroids_ko <- centroid_matrix_ko[trajectory_order_ko, ]
+lines(trajectory_centroids_ko[1:6, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 4)
+lines(trajectory_centroids_ko[6:12, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 2)
+lines(trajectory_centroids_ko[12:18, ], col = "black", lwd = 2, type = "o", pch = 1, lty = 1)
 
-
-##### BARPLOT #####
-test <- stacked.bars(taxon_level = "family",
-             var_list = c("year_timepoint", "timepoint", "pop", "SampleID"),
-             number = 30,
-             input_community = season_otu,
-             input_tax = season_tax[colnames(season_otu), ],
-             input_variable = season_var,
-             tax_disp  = c("phylum", "family"),
-             X_levels = NULL, trans, bars = T) 
-
-test + theme(axis.text.x = element_blank(), axis.text.y = element_text(lineheight = 7), axis.title = element_blank(), title = element_blank(), legend.title = element_blank(), panel.spacing.y = unit(c(0, 0), "mm"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_rect(fill = "darkgrey"), panel.border = element_rect(fill = "transparent", colour = "black",linewidth = 1), axis.ticks.length.y = unit(1, "mm"), axis.ticks.y = element_line(colour = "#333333", linewidth = .1), axis.ticks.length.x = unit(0, "mm"), plot.margin = unit(c(1, 1, 1, 1), "mm")) +
-  scale_fill_manual(values = c("#da814e","#b15928",
-                                         "#d2ebf2","#c0dce6","#aecddb","#98bccd","#85acc1","#729cb4","#5e8ca7","#4b7d9c","#386d8f","#145078",
-                                         "#c6dfaf","#7ec06e","#33a02c",
-                                         "#ffe88d","#ffde5c","#ffcc00",
-                                         "#dccce4","#a384bf","#6a3d9a",
-                                         "#cbe5d0","#94c1a6","#247852",
-                                         "#FDBF6F","#ff7f00",
-                                         "#fbcecd","#fb9a99","#e31a1c","#800080"))
-#################
-
-
-##### SUMMARY ######
-seas_otu <- season_tax[colnames(season_otu), ]
-seas_otu$abundance <- colSums(season_otu[, rownames(seas_otu)])
-seas_otu$prop <- seas_otu$abundance/sum(seas_otu$abundance)
-seas_otu$perc <- seas_otu$prop*100
-
-seas_gen <- aggregate(seas_otu[, 7:9], by =      seas_otu[, 1:6], FUN = "sum")
-seas_fam <- aggregate(seas_otu[, 7:9], by =      seas_otu[, 1:5], FUN = "sum")
-seas_ord <- aggregate(seas_otu[, 7:9], by =      seas_otu[, 1:4], FUN = "sum")
-seas_cls <- aggregate(seas_otu[, 7:9], by =      seas_otu[, 1:3], FUN = "sum")
-seas_phl <- aggregate(seas_otu[, 7:9], by =      seas_otu[, 1:2], FUN = "sum")
-seas_dom <- aggregate(seas_otu[, 7:9], by = list(seas_otu[, 1  ]), FUN = "sum")
-
-View(seas_fam)
-View(seas_phl)
+##############
 
