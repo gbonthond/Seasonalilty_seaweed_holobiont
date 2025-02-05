@@ -170,7 +170,9 @@ rarefaction <- function(x, sample, replicate) {
 ##### DATA PREPARATION #####
 permanent_otu <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/seasonality_otu.csv", header = T, row.names = 1);dim(permanent_otu)
 #permanent_rar <- rarefaction(permanent_otu, sample = 1000, replicate = 100);dim(permanent_rar)
-#write.csv(permanent_rar, file = "permanent_rar.csv");dim(permanent_rar)
+#save(permanent_rar, file = "Rdata/permanent_rar.Rdata");dim(permanent_rar)
+load(file = "Rdata/permanent_rar.Rdata");dim(permanent_rar)
+
 permanent_rar <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/permanent_rar.csv", header = T, row.names = 1);dim(permanent_rar)
 permanent_var <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/seasonality_var.csv", header = T, row.names = 1, stringsAsFactors = T);dim(permanent_var)
 permanent_var$day_length <- with(getSunlightTimes(date = seq(as.Date("2020-01-01"), as.Date("2020-12-31"), by = "day"), lat = 54.3233, lon = 10.1228, keep = c("sunrise", "sunset")), as.numeric(difftime(sunset, sunrise, units = "hours")))[permanent_var$day]
@@ -181,8 +183,8 @@ permanent_ko  <- round(read.csv(file = "https://raw.githubusercontent.com/gbonth
 permanent_ko  <- permanent_ko[, colSums(permanent_ko) > 0];dim(permanent_ko)
 permanent_ko  <- permanent_ko[, order(colSums(permanent_ko), decreasing = T)];dim(permanent_ko)
 #permanent_ko_rar <- rarefaction(permanent_ko, sample = 1000, replicate = 100);dim(permanent_ko_rar)
-#write.csv(permanent_rar, file = "C:/Users/Bonthond/Documents/GitHub/Seasonalilty_seaweed_holobiont/permanent_ko_rar.csv");dim(permanent_rar)
-permanent_rar <- read.csv(file = "https://raw.githubusercontent.com/gbonthond/Seasonalilty_seaweed_holobiont/refs/heads/main/permanent_ko_rar.csv", header = T, row.names = 1);dim(permanent_ko_rar)
+#save(permanent_ko_rar, file = "Rdata/permanent_ko_rar.Rdata")
+load(file = "Rdata/permanent_ko_rar.Rdata");dim(permanent_rar)
 
 # Reduced to 95% cumulative most abundant OTUs of at least 0.25 prevelance
 permanent_tax_sub <- permanent_tax[cumsum(permanent_tax$abundance) < .95 & permanent_tax$occupancy > .25, ];dim(permanent_tax_sub)
@@ -225,7 +227,7 @@ glm_otu_rich_pseudo_R2 <- 1-(glm_otu_rich$deviance/glm_otu_rich$null.deviance);g
 plot_otu_rich <- ggplot(glm_otu_rich_effect_pop, aes(x = timepoint, y = fit)) +
   geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
   geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
-  geom_line(data = glm_otu_rich_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_line(data = glm_otu_rich_effect_general, aes(x = timepoint, y = fit, group = 1), linewidth = 1, color = "black", linetype = "dashed") + 
   geom_errorbar(data = glm_otu_rich_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black") +  
   geom_point(data = glm_otu_rich_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
   ylim(0, 3000) + 
@@ -253,7 +255,7 @@ glm_otu_PIE_pseudo_R2 <- 1-(glm_otu_PIE$deviance/glm_otu_PIE$null.deviance);glm_
 plot_otu_PIE <- ggplot(glm_otu_PIE_effect_pop, aes(x = timepoint, y = fit)) +
   geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
   geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
-  geom_line(data = glm_otu_PIE_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_line(data = glm_otu_PIE_effect_general, aes(x = timepoint, y = fit, group = 1), linewidth = 1, color = "black", linetype = "dashed") + 
   geom_errorbar(data = glm_otu_PIE_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black",position = position_dodge(width = 0.5)) +  
   geom_point(data = glm_otu_PIE_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
   ylim(2, 5) + 
@@ -281,7 +283,7 @@ glm_ko_rich_pseudo_R2 <- 1-(glm_ko_rich$deviance/glm_ko_rich$null.deviance);glm_
 plot_ko_rich <- ggplot(glm_ko_rich_effect_pop, aes(x = timepoint, y = fit)) +
   geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
   geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
-  geom_line(data = glm_ko_rich_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_line(data = glm_ko_rich_effect_general, aes(x = timepoint, y = fit, group = 1), linewidth = 1, color = "black", linetype = "dashed") + 
   geom_errorbar(data = glm_ko_rich_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black",position = position_dodge(width = 0.5)) +  
   geom_point(data = glm_ko_rich_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
   ylim(6000, 6800) + 
@@ -309,7 +311,7 @@ glm_ko_PIE_pseudo_R2 <- 1-(glm_ko_PIE$deviance/glm_ko_PIE$null.deviance);glm_ko_
 plot_ko_PIE <- ggplot(glm_ko_PIE_effect_pop, aes(x = timepoint, y = fit)) +
   geom_point(size = 5, stroke = 2, aes(fill = pop), shape = 21, position = position_dodge(width = .5)) +
   geom_errorbar(aes(ymin = lower, ymax = upper, group = pop), width = 0, size = 1, color = "black",position = position_dodge(width = .5)) +
-  geom_line(data = glm_ko_PIE_effect_general, aes(x = timepoint, y = fit, group = 1), size = 1, color = "black", linetype = "dashed") + 
+  geom_line(data = glm_ko_PIE_effect_general, aes(x = timepoint, y = fit, group = 1), linewidth = 1, color = "black", linetype = "dashed") + 
   geom_errorbar(data = glm_ko_PIE_effect_general, aes(ymin = lower, ymax = upper), width = 0, size = 3, color = "black",position = position_dodge(width = 0.5)) +  
   geom_point(data = glm_ko_PIE_effect_general, size = 10, stroke = .1, aes(x = timepoint, y = fit, color = timepoint)) +
   ylim(7.2, 7.45) + 
@@ -334,30 +336,30 @@ ggarrange(plot_otu_rich, plot_otu_PIE, plot_ko_rich, plot_ko_PIE)
 ### for each level in sample_type an mGLMs as reference level
 #permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "alga")
 #permanent_alg_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year, family = "negative.binomial", data = permanent_var)
-#save(permanent_alg_otu_mglm, file = "permanent_alg_otu_mglm.Rdata") # load saved model
-load(file = "permanent_alg_otu_mglm.Rdata") # load saved model
+#save(permanent_alg_otu_mglm, file = "Rdata/permanent_alg_otu_mglm.Rdata") # load saved model
+load(file = "Rdata/permanent_alg_otu_mglm.Rdata") # load saved model
 
 #permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "sediment")
 #permanent_sed_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year, family = "negative.binomial", data = permanent_var)
-#save(permanent_sed_otu_mglm, file = "permanent_sed_otu_mglm.Rdata") # load saved model
-load(file = "permanent_sed_otu_mglm.Rdata") # load saved model
+#save(permanent_sed_otu_mglm, file = "Rdata/permanent_sed_otu_mglm.Rdata") # load saved model
+load(file = "Rdata/permanent_sed_otu_mglm.Rdata") # load saved model
 
 #permanent_var$sample_type <- relevel(permanent_var$sample_type, ref = "water")
 #permanent_wat_otu_mglm <- manyglm(mvabund(permanent_otu_sub) ~ offset(log(seq_depth)) + sample_type + timepoint + year, family = "negative.binomial", data = permanent_var)
-#save(permanent_wat_otu_mglm, file = "permanent_wat_otu_mglm.Rdata") # load saved model
-load(file = "permanent_wat_otu_mglm.Rdata") # load saved model
+#save(permanent_wat_otu_mglm, file = "Rdata/permanent_wat_otu_mglm.Rdata") # load saved model
+load(file = "Rdata/permanent_wat_otu_mglm.Rdata") # load saved model
 
 #permanent_alg_otu_mglm_s <- summary.manyglm(permanent_alg_otu_mglm, nBoot = 999, block = permanent_alg_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#save(permanent_alg_otu_mglm_s, file = "permanent_alg_otu_mglm_s.Rdata") # load saved model
-load(file = "permanent_alg_otu_mglm_s.Rdata")
+#save(permanent_alg_otu_mglm_s, file = "Rdata/permanent_alg_otu_mglm_s.Rdata") # load saved model
+load(file = "Rdata/permanent_alg_otu_mglm_s.Rdata")
 
 #permanent_sed_otu_mglm_s <- summary.manyglm(permanent_sed_otu_mglm, nBoot = 999, block = permanent_sed_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#save(permanent_sed_otu_mglm_s, file = "permanent_sed_otu_mglm_s.Rdata") # load saved model
-load(file = "permanent_sed_otu_mglm_s.Rdata")
+#save(permanent_sed_otu_mglm_s, file = "Rdata/permanent_sed_otu_mglm_s.Rdata") # load saved model
+load(file = "Rdata/permanent_sed_otu_mglm_s.Rdata")
 
 #permanent_wat_otu_mglm_s <- summary.manyglm(permanent_wat_otu_mglm, nBoot = 999, block = permanent_wat_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#save(permanent_wat_otu_mglm_s, file = "permanent_wat_otu_mglm_s.Rdata") # load saved model
-load(file = "permanent_wat_otu_mglm_s.Rdata")
+#save(permanent_wat_otu_mglm_s, file = "Rdata/permanent_wat_otu_mglm_s.Rdata") # load saved model
+load(file = "Rdata/permanent_wat_otu_mglm_s.Rdata")
 
 permanent_alg_core <- permanent.core(permanent_alg_otu_mglm, permanent_alg_otu_mglm_s, p = 0.01, coef = 0, pooled = F, p.adjust = "fdr");dim(permanent_alg_core)
 permanent_sed_core <- permanent.core(permanent_sed_otu_mglm, permanent_sed_otu_mglm_s, p = 0.01, coef = 0, pooled = F, p.adjust = "fdr");dim(permanent_sed_core)
@@ -412,11 +414,11 @@ permanent_wat_core_otu <- permanent.core(permanent_wat_otu_mglm, permanent_wat_o
 
 ##### mGLMs SEASONAL CORES #####
 #season_otu_mglm <- manyglm(mvabund(season_otu) ~ offset(log(seq_depth)) + season + year, family = "negative.binomial", data = season_var)
-#save(season_otu_mglm, file = "season_otu_mglm.Rdata") # save model to call it next time directly
-load(file = "season_otu_mglm.Rdata") # load saved model
+#save(season_otu_mglm, file = "Rdata/season_otu_mglm.Rdata") # save model to call it next time directly
+load(file = "Rdata/season_otu_mglm.Rdata") # load saved model
 #season_otu_mglm_s <- summary.manyglm(season_otu_mglm, nBoot = 999, block = season_otu_mglm$data$pop, test = "wald", resamp = "case", show.time = "all", p.uni = "unadjusted")
-#save(season_otu_mglm_s, file = "season_otu_mglm_s.Rdata")
-load(file = "season_otu_mglm_s.Rdata")
+#save(season_otu_mglm_s, file = "Rdata/season_otu_mglm_s.Rdata")
+load(file = "Rdata/season_otu_mglm_s.Rdata")
 
 ### GET SEASONAL CORE OTUs 
 season_core_otu <- seasonal.core(season_otu_mglm, season_otu_mglm_s, p = 0.01, coef = 0, p.adjust = "fdr");dim(season_core_otu)
@@ -510,8 +512,8 @@ for(i in 1:nrow(core_table)) {
 # nmds OTU
 #alga_nmds1 <- metaMDS(alga_rar, distance = "bray", trymax = 200, try = 100, autotransform = F)
 #alga_nmds2 <- metaMDS(alga_rar, distance = "bray", trymax = 200, try = 100, autotransform = F, previous.best = alga_nmds1)
-#save(alga_nmds2, file= "alga_nmds2.Rdata")
-load("alga_nmds2.Rdata")
+#save(alga_nmds2, file= "Rdata/alga_nmds2.Rdata")
+load("Rdata/alga_nmds2.Rdata")
 alga_nmds2
 
 alga_env <- envfit(alga_nmds2, alga_var[, c("pH", "salinity", "temperature", "day_length")], permutations = 9999, na.rm = TRUE)
@@ -578,8 +580,8 @@ lines(trajectory_centroids_hei[12:18, ], col = "black", lwd = 2, type = "o", pch
 # nmds KO
 #alga_ko_nmds1 <- metaMDS(alga_ko_rar, distance = "bray", trymax = 200, try = 100, autotransform = F)
 #alga_ko_nmds2 <- metaMDS(alga_ko_rar, distance = "bray", trymax = 200, try = 100, autotransform = F, previous.best = alga_ko_nmds1)
-#save(alga_ko_nmds2, file= "alga_ko_nmds2.Rdata")
-load("alga_ko_nmds2.Rdata")
+#save(alga_ko_nmds2, file= "Rdata/alga_ko_nmds2.Rdata")
+load("Rdata/alga_ko_nmds2.Rdata")
 alga_ko_nmds2
 alga_ko_env <- envfit(alga_ko_nmds2, alga_var[, c("pH", "salinity", "temperature", "day_length")], permutations = 9999, na.rm = TRUE)
 
